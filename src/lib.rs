@@ -6,7 +6,8 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LazyOption;
 use near_sdk::json_types::{ValidAccountId, U128};
 use near_sdk::{
-    assert_one_yocto, env, ext_contract, near_bindgen, AccountId, PanicOnDefault, PromiseOrValue,
+    assert_one_yocto, assert_self, env, ext_contract, near_bindgen, AccountId, PanicOnDefault,
+    PromiseOrValue,
 };
 
 near_sdk::setup_alloc!();
@@ -59,7 +60,7 @@ impl WrappedAppchainToken {
         );
         this
     }
-
+    ///
     #[payable]
     pub fn mint(&mut self, account_id: ValidAccountId, amount: U128) {
         self.assert_owner();
@@ -67,13 +68,20 @@ impl WrappedAppchainToken {
         self.token
             .internal_deposit(account_id.as_ref(), amount.into());
     }
-
+    ///
     #[payable]
     pub fn burn(&mut self, account_id: ValidAccountId, amount: U128) {
         assert_one_yocto();
         self.assert_owner();
         self.token
             .internal_withdraw(account_id.as_ref(), amount.into());
+    }
+    ///
+    pub fn set_icon(&mut self, icon: String) {
+        assert_self();
+        let mut metadata = self.metadata.get().unwrap();
+        metadata.icon = Some(icon);
+        self.metadata.set(&metadata);
     }
 }
 
