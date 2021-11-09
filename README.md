@@ -43,3 +43,17 @@ Get owner:
 ```bash
 near view $WRAPPED_APPCHAIN_TOKEN get_owner '{}'
 ```
+
+## Prepare data link for icon of fungible token metadata
+
+According to the NEAR protocol specification, the field `icon` of `FungibleTokenMetadata` must be a data URL if present. The actual value of this field can be obtained by the following steps:
+
+* Prepare the original icon file, the recommended file type is `svg`.
+* Use the free tool [SVGOMG](https://jakearchibald.github.io/svgomg/) to optimize the original icon file.
+* Encode the optimized SVG file to base64 string. It can be done by following command on linux/macOS:
+
+```shell
+base64 <optimized icon file>.svg > <base64 encoding result>.txt
+```
+
+* The value of the field `icon` should be a string with fixed prefix `data:image/svg+xml;base64,` and concatenated with the base64 encoded string of the optimized SVG file.
