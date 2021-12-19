@@ -12,6 +12,8 @@ use near_sdk::{
 
 near_sdk::setup_alloc!();
 
+const T_GAS: u64 = 1_000_000_000_000;
+
 #[ext_contract(ext_appchain_anchor)]
 trait AppchainAnchor {
     fn sync_basedata_of_wrapped_appchain_token(
@@ -20,6 +22,11 @@ trait AppchainAnchor {
         premined_beneficiary: AccountId,
         premined_balance: U128,
     );
+}
+
+#[ext_contract(ext_self)]
+trait WrappedAppchainTokenSelf {
+    fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
 }
 
 #[near_bindgen]
@@ -47,9 +54,10 @@ impl WrappedAppchainToken {
             owner_id: owner_id.clone().into(),
         };
         this.token
-            .internal_register_account(premined_beneficiary.as_ref());
+            .internal_register_account(&env::current_account_id());
         this.token
-            .internal_deposit(premined_beneficiary.as_ref(), premined_balance.into());
+            .internal_register_account(premined_beneficiary.as_ref());
+        this.internal_mint(premined_beneficiary.clone(), premined_balance);
         ext_appchain_anchor::sync_basedata_of_wrapped_appchain_token(
             metadata,
             premined_beneficiary.to_string(),
@@ -65,8 +73,20 @@ impl WrappedAppchainToken {
     pub fn mint(&mut self, account_id: ValidAccountId, amount: U128) {
         self.assert_owner();
         self.storage_deposit(Some(account_id.clone()), None);
+        self.internal_mint(account_id, amount);
+    }
+    //
+    fn internal_mint(&mut self, account_id: ValidAccountId, amount: U128) {
         self.token
-            .internal_deposit(account_id.as_ref(), amount.into());
+            .internal_deposit(&env::current_account_id(), amount.into());
+        ext_self::ft_transfer(
+            account_id.to_string(),
+            amount,
+            None,
+            &env::current_account_id(),
+            1,
+            10 * T_GAS,
+        );
     }
     ///
     #[payable]
