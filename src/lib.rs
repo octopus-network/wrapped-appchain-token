@@ -1,18 +1,16 @@
+use std::ops::Mul;
+
 use near_contract_standards::fungible_token::metadata::{
     FungibleTokenMetadata, FungibleTokenMetadataProvider,
 };
 use near_contract_standards::fungible_token::FungibleToken;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LazyOption;
-use near_sdk::json_types::{ValidAccountId, U128};
+use near_sdk::json_types::U128;
 use near_sdk::{
-    assert_one_yocto, assert_self, env, ext_contract, near_bindgen, AccountId, PanicOnDefault,
+    assert_one_yocto, assert_self, env, ext_contract, near_bindgen, AccountId, Gas, PanicOnDefault,
     PromiseOrValue,
 };
-
-near_sdk::setup_alloc!();
-
-const T_GAS: u64 = 1_000_000_000_000;
 
 #[ext_contract(ext_appchain_anchor)]
 trait AppchainAnchor {
@@ -41,8 +39,8 @@ pub struct WrappedAppchainToken {
 impl WrappedAppchainToken {
     #[init]
     pub fn new(
-        owner_id: ValidAccountId,
-        premined_beneficiary: ValidAccountId,
+        owner_id: AccountId,
+        premined_beneficiary: AccountId,
         premined_balance: U128,
         metadata: FungibleTokenMetadata,
     ) -> Self {
@@ -55,46 +53,44 @@ impl WrappedAppchainToken {
         };
         this.token
             .internal_register_account(&env::current_account_id());
-        this.token
-            .internal_register_account(premined_beneficiary.as_ref());
+        this.token.internal_register_account(&premined_beneficiary);
         this.internal_mint(premined_beneficiary.clone(), premined_balance);
         ext_appchain_anchor::sync_basedata_of_wrapped_appchain_token(
             metadata,
-            premined_beneficiary.to_string(),
+            premined_beneficiary,
             premined_balance,
-            &owner_id,
+            owner_id,
             0,
-            80_000_000_000_000,
+            Gas::ONE_TERA.mul(80),
         );
         this
     }
     ///
     #[payable]
-    pub fn mint(&mut self, account_id: ValidAccountId, amount: U128) {
+    pub fn mint(&mut self, account_id: AccountId, amount: U128) {
         self.assert_owner();
         self.storage_deposit(Some(account_id.clone()), None);
         self.internal_mint(account_id, amount);
     }
     //
-    fn internal_mint(&mut self, account_id: ValidAccountId, amount: U128) {
+    fn internal_mint(&mut self, account_id: AccountId, amount: U128) {
         self.token
             .internal_deposit(&env::current_account_id(), amount.into());
         ext_self::ft_transfer(
-            account_id.to_string(),
+            account_id,
             amount,
             None,
-            &env::current_account_id(),
+            env::current_account_id(),
             1,
-            10 * T_GAS,
+            Gas::ONE_TERA.mul(10),
         );
     }
     ///
     #[payable]
-    pub fn burn(&mut self, account_id: ValidAccountId, amount: U128) {
+    pub fn burn(&mut self, account_id: AccountId, amount: U128) {
         assert_one_yocto();
         self.assert_owner();
-        self.token
-            .internal_withdraw(account_id.as_ref(), amount.into());
+        self.token.internal_withdraw(&account_id, amount.into());
     }
     ///
     pub fn set_icon(&mut self, icon: String) {
