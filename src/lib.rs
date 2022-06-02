@@ -1,5 +1,6 @@
 use std::ops::Mul;
 
+use near_contract_standards::fungible_token::core::ext_ft_core;
 use near_contract_standards::fungible_token::metadata::{
     FungibleTokenMetadata, FungibleTokenMetadataProvider,
 };
@@ -8,24 +9,9 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LazyOption;
 use near_sdk::json_types::U128;
 use near_sdk::{
-    assert_one_yocto, assert_self, env, ext_contract, near_bindgen, AccountId, Gas, PanicOnDefault,
+    assert_one_yocto, assert_self, env, near_bindgen, AccountId, Gas, PanicOnDefault, Promise,
     PromiseOrValue,
 };
-
-#[ext_contract(ext_appchain_anchor)]
-trait AppchainAnchor {
-    fn sync_basedata_of_wrapped_appchain_token(
-        &mut self,
-        metadata: FungibleTokenMetadata,
-        premined_beneficiary: AccountId,
-        premined_balance: U128,
-    );
-}
-
-#[ext_contract(ext_self)]
-trait WrappedAppchainTokenSelf {
-    fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
-}
 
 #[near_bindgen]
 #[derive(BorshSerialize, BorshDeserialize, PanicOnDefault)]
@@ -55,13 +41,26 @@ impl WrappedAppchainToken {
             .internal_register_account(&env::current_account_id());
         this.token.internal_register_account(&premined_beneficiary);
         this.internal_mint(premined_beneficiary.clone(), premined_balance);
-        ext_appchain_anchor::sync_basedata_of_wrapped_appchain_token(
+        // sync state to corresponding appchain anchor contract
+        #[derive(near_sdk::serde::Serialize)]
+        #[serde(crate = "near_sdk::serde")]
+        struct Args {
+            metadata: FungibleTokenMetadata,
+            premined_beneficiary: AccountId,
+            premined_balance: U128,
+        }
+        let args = Args {
             metadata,
             premined_beneficiary,
             premined_balance,
-            owner_id,
+        };
+        let args = near_sdk::serde_json::to_vec(&args)
+            .expect("Failed to serialize the cross contract args using JSON.");
+        Promise::new(owner_id).function_call(
+            "sync_basedata_of_wrapped_appchain_token".to_string(),
+            args,
             0,
-            Gas::ONE_TERA.mul(80),
+            Gas::ONE_TERA.mul(50),
         );
         this
     }
@@ -76,14 +75,10 @@ impl WrappedAppchainToken {
     fn internal_mint(&mut self, account_id: AccountId, amount: U128) {
         self.token
             .internal_deposit(&env::current_account_id(), amount.into());
-        ext_self::ft_transfer(
-            account_id,
-            amount,
-            None,
-            env::current_account_id(),
-            1,
-            Gas::ONE_TERA.mul(10),
-        );
+        ext_ft_core::ext(env::current_account_id())
+            .with_attached_deposit(1)
+            .with_static_gas(Gas::ONE_TERA.mul(10))
+            .ft_transfer(account_id, amount, None);
     }
     ///
     #[payable]
